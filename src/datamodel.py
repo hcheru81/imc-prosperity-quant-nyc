@@ -80,10 +80,7 @@ class Order:
 
 
 class OrderDepth:
-
-    def __init__(
-        self, buy_orders=None, sell_orders=None
-    ):  # NOTE: had to add default values to avoid unexpected keyword argument.
+    def __init__(self, buy_orders: Dict[int, int], sell_orders: Dict[int, int]):
         self.buy_orders: Dict[int, int] = {}
         self.sell_orders: Dict[int, int] = {}
 
