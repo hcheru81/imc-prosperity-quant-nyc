@@ -1,5 +1,5 @@
 from datamodel import Listing, OrderDepth, Trade, TradingState
-from helpers import print_attributes
+from helpers import print_attributes, plot_order_depths
 from trader import Trader
 
 timestamp = 1000
@@ -16,10 +16,13 @@ listings = {
 order_depths = {"PRODUCT1": OrderDepth(), "PRODUCT2": OrderDepth()}
 
 # Set the buy_orders and sell_orders explicitly
+
 order_depths["PRODUCT1"].buy_orders = {10: 7, 9: 5}
-order_depths["PRODUCT1"].sell_orders = {11: -4, 12: -8}
+order_depths["PRODUCT1"].sell_orders = {13: -8, 12: -4, 30: -10}
 order_depths["PRODUCT2"].buy_orders = {142: 3, 141: 5}
-order_depths["PRODUCT2"].sell_orders = {144: -5, 145: -8}
+order_depths["PRODUCT2"].sell_orders = {144: -8, 142: -3, 200: -10}
+
+# plot_order_depths(order_depths)
 
 own_trades = {"PRODUCT1": [], "PRODUCT2": []}
 
@@ -37,7 +40,7 @@ market_trades = {
     "PRODUCT2": [],
 }
 
-position = {"PRODUCT1": 3, "PRODUCT2": -5}
+position = {"PRODUCT1": 0, "PRODUCT2": 0}
 
 observations = {}
 traderData = ""
@@ -57,5 +60,5 @@ trader = Trader()
 result, conversion, traderData = trader.run(state)
 
 print(result)
-print(conversion)
-print(traderData)
+# print(conversion)
+# print(traderData)
