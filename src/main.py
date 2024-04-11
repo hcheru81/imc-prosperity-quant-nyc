@@ -5,31 +5,31 @@ from trader import Trader
 timestamp = 1000
 
 listings = {
-    "PRODUCT1": Listing(
-        symbol="PRODUCT1", product="PRODUCT1", denomination="SEASHELLS"
+    "STARFRUIT": Listing(
+        symbol="STARFRUIT", product="STARFRUIT", denomination="SEASHELLS"
     ),
-    "PRODUCT2": Listing(
-        symbol="PRODUCT2", product="PRODUCT2", denomination="SEASHELLS"
+    "AMETHYSTS": Listing(
+        symbol="AMETHYSTS", product="AMETHYSTS", denomination="SEASHELLS"
     ),
 }
 
-order_depths = {"PRODUCT1": OrderDepth(), "PRODUCT2": OrderDepth()}
+order_depths = {"STARFRUIT": OrderDepth(), "AMETHYSTS": OrderDepth()}
 
 # Set the buy_orders and sell_orders explicitly
 
-order_depths["PRODUCT1"].buy_orders = {10: 7, 9: 5}
-order_depths["PRODUCT1"].sell_orders = {13: -8, 12: -4, 30: -10}
-order_depths["PRODUCT2"].buy_orders = {142: 3, 141: 5}
-order_depths["PRODUCT2"].sell_orders = {144: -8, 142: -3, 200: -10}
+order_depths["STARFRUIT"].buy_orders = {20: 7, 9: 5}
+order_depths["STARFRUIT"].sell_orders = {13: -8, 12: -4, 30: -10}
+order_depths["AMETHYSTS"].buy_orders = {10004: 5, 10003: 3}
+order_depths["AMETHYSTS"].sell_orders = {10000: -10, 10001: -3, 9995: -1}
 
 # plot_order_depths(order_depths)
 
-own_trades = {"PRODUCT1": [], "PRODUCT2": []}
+own_trades = {"STARFRUIT": [], "AMETHYSTS": []}
 
 market_trades = {
-    "PRODUCT1": [
+    "STARFRUIT": [
         Trade(
-            symbol="PRODUCT1",
+            symbol="STARFRUIT",
             price=11,
             quantity=4,
             buyer="",
@@ -37,10 +37,10 @@ market_trades = {
             timestamp=900,
         )
     ],
-    "PRODUCT2": [],
+    "AMETHYSTS": [],
 }
 
-position = {"PRODUCT1": 0, "PRODUCT2": 0}
+position = {"STARFRUIT": 0, "AMETHYSTS": 0}
 
 observations = {}
 traderData = ""
@@ -55,10 +55,10 @@ state = TradingState(
     position,
     observations,
 )
+# print_attributes(state)
 
 trader = Trader()
 result, conversion, traderData = trader.run(state)
 
+print("Result:")
 print(result)
-# print(conversion)
-# print(traderData)
