@@ -43,8 +43,9 @@ class Trader:
             return 0  # Fallback if no orders
 
     def run(self, state: TradingState):
+        # print(f"t={state.timestamp}, observations={state.observations}")
         self.update_price_history(state.market_trades)
-        print("Price history: " + str(self.price_history))
+        # print("Price history: " + str(self.price_history))
 
         result = {}
         for product, order_depth in state.order_depths.items():
