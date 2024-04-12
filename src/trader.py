@@ -6,8 +6,8 @@ from datamodel import Order, OrderDepth, TradingState, UserId
 
 class Trader:
 
-    def __init__(self) -> None:
-        self.position_limits = {"STARFRUIT": 20, "AMETHYSTS": 20}
+    # def __init__(self) -> None:
+    #     self.position_limits = {"STARFRUIT": 20, "AMETHYSTS": 20}
 
     def calculate_acceptable_price(
         self, buy_orders: dict, sell_orders: dict, product
@@ -34,20 +34,22 @@ class Trader:
         elif sell_orders:
             return int(min(sell_orders.keys()))  # Min sell price if no buy orders
         else:
-            return 0  # Fallback if no orders
+            return 0  # Fallback
 
     def run(self, state: TradingState):
         result = {}
         fudge_factors = {
             "STARFRUIT": {
-                "obg": 6,
-                "sodc": 1,
-                "bodc": 1,
+                "b_obg": 5,
+                "s_obg": 6,
+                "b_odc": 1,
+                "s_odc": 1,
             },
             "AMETHYSTS": {
-                "obg": 6,
-                "sodc": 1,
-                "bodc": 1,
+                "b_obg": 6,
+                "s_obg": 6,
+                "b_odc": 1,
+                "s_odc": 1,
             },
         }
 
@@ -56,32 +58,36 @@ class Trader:
                 order_depth.buy_orders, order_depth.sell_orders, product
             )
 
-            print(state.position)
+            # print(state.position)
 
             orders: List[Order] = []
             sorted_sell_orders = sorted(order_depth.sell_orders.items())
-            for price, volume in sorted_sell_orders[0 : fudge_factors[product]["sodc"]]:
-                print(
-                    f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                )
+            for price, volume in sorted_sell_orders[
+                0 : fudge_factors[product]["s_odc"]
+            ]:
+                # print(
+                #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
+                # )
                 if price <= acceptable_price:  # place a buy order to fill sell order
                     orders.append(
                         Order(
-                            product, price, abs(volume) + fudge_factors[product]["obg"]
+                            product,
+                            price,
+                            abs(volume) + fudge_factors[product]["s_obg"],
                         )
                     )
 
             sorted_buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
-            for price, volume in sorted_buy_orders[0 : fudge_factors[product]["bodc"]]:
-                print(
-                    f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                )
+            for price, volume in sorted_buy_orders[0 : fudge_factors[product]["b_odc"]]:
+                # print(
+                #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
+                # )
                 if price > acceptable_price:
                     orders.append(
                         Order(
                             product,
                             price,
-                            -(abs(volume) + fudge_factors[product]["obg"]),
+                            -(abs(volume) + fudge_factors[product]["b_obg"]),
                         )
                     )
 
