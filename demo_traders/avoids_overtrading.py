@@ -1,6 +1,9 @@
 import string
 from typing import List
 
+import numpy as np
+import pandas as pd
+
 from datamodel import Order, OrderDepth, TradingState, UserId
 
 
@@ -38,56 +41,41 @@ class Trader:
 
     def run(self, state: TradingState):
         result = {}
-        fudge_factors = {
-            "STARFRUIT": {
-                "obg": 6,
-                "sodc": 1,
-                "bodc": 1,
-            },
-            "AMETHYSTS": {
-                "obg": 6,
-                "sodc": 1,
-                "bodc": 1,
-            },
-        }
+        positions = {"STARFRUIT": 0, "AMETHYSTS": 0}
+        for k, v in state.position.items():
+            positions[k] += v
 
         for product, order_depth in state.order_depths.items():
             acceptable_price = self.calculate_acceptable_price(
                 order_depth.buy_orders, order_depth.sell_orders, product
             )
 
-            print(state.position)
-
             orders: List[Order] = []
             sorted_sell_orders = sorted(order_depth.sell_orders.items())
-            for price, volume in sorted_sell_orders[0 : fudge_factors[product]["sodc"]]:
-                print(
-                    f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                )
-                if price <= acceptable_price:  # place a buy order to fill sell order
-                    orders.append(
-                        Order(
-                            product, price, abs(volume) + fudge_factors[product]["obg"]
-                        )
-                    )
+
+            for price, volume in sorted_sell_orders:
+                if price <= acceptable_price:
+                    if (
+                        positions[product] + abs(volume)
+                        >= self.position_limits[product]
+                    ):
+                        result[product] = orders
+                        return result, "SAMPLE", 1
+                    orders.append(Order(product, price, abs(volume)))
+                    positions[product] += volume
 
             sorted_buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
-            for price, volume in sorted_buy_orders[0 : fudge_factors[product]["bodc"]]:
-                print(
-                    f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                )
-                if price > acceptable_price:
-                    orders.append(
-                        Order(
-                            product,
-                            price,
-                            -(abs(volume) + fudge_factors[product]["obg"]),
-                        )
-                    )
+            for price, volume in sorted_buy_orders:
+                if price >= acceptable_price:
+                    if (
+                        positions[product] + abs(volume)
+                        >= self.position_limits[product]
+                    ):
+                        result[product] = orders
+                        return result, "SAMPLE", 1
+                    orders.append(Order(product, price, -abs(volume)))
+                    positions[product] += volume
 
             result[product] = orders
 
-        traderData = "SAMPLE"
-        conversions = 1
-
-        return result, traderData, conversions
+        return result, "SAMPLE", 1

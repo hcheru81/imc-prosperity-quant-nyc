@@ -1,5 +1,5 @@
 from datamodel import Listing, OrderDepth, Trade, TradingState
-from helpers import print_attributes, plot_order_depths
+from helpers import plot_order_depths, print_attributes
 from trader import Trader
 
 timestamp = 1000
@@ -20,7 +20,7 @@ order_depths = {"STARFRUIT": OrderDepth(), "AMETHYSTS": OrderDepth()}
 order_depths["STARFRUIT"].buy_orders = {20: 7, 9: 5}
 order_depths["STARFRUIT"].sell_orders = {13: -8, 12: -4, 30: -10}
 order_depths["AMETHYSTS"].buy_orders = {10004: 5, 10003: 3}
-order_depths["AMETHYSTS"].sell_orders = {10000: -10, 10001: -3, 9995: -1}
+order_depths["AMETHYSTS"].sell_orders = {10000: -2, 10001: -3, 9995: -1, 10002: -10}
 
 # plot_order_depths(order_depths)
 
@@ -34,10 +34,27 @@ market_trades = {
             quantity=4,
             buyer="",
             seller="",
-            timestamp=900,
+            timestamp=800,
         )
     ],
-    "AMETHYSTS": [],
+    "AMETHYSTS": [
+        Trade(
+            symbol="AMETHYSTS",
+            price=10001,
+            quantity=1,
+            buyer="",
+            seller="",
+            timestamp=900,
+        ),
+        Trade(
+            symbol="AMETHYSTS",
+            price=10000,
+            quantity=3,
+            buyer="",
+            seller="",
+            timestamp=1000,
+        ),
+    ],
 }
 
 position = {"STARFRUIT": 0, "AMETHYSTS": 0}
@@ -59,6 +76,6 @@ state = TradingState(
 
 trader = Trader()
 result, conversion, traderData = trader.run(state)
-
 print("Result:")
 print(result)
+# result, conversion, traderData = trader.run(state)
