@@ -6,12 +6,12 @@ from datamodel import Order, OrderDepth, TradingState, UserId
 
 class Trader:
 
-    # def __init__(self) -> None:
-    #     self.position_limits = {"STARFRUIT": 20, "AMETHYSTS": 20}
-
     def calculate_acceptable_price(
         self, buy_orders: dict, sell_orders: dict, product
     ) -> int:
+
+        if product == "AMETHYSTS":
+            return 10000
 
         def vwap(orders: dict) -> float:
             total_volume = sum(orders.values())
@@ -40,16 +40,16 @@ class Trader:
         result = {}
         fudge_factors = {
             "STARFRUIT": {
-                "b_obg": 5,
-                "s_obg": 6,
-                "b_odc": 1,
-                "s_odc": 1,
+                "b_obg": 2,
+                "s_obg": 2,
+                "b_odc": 2,
+                "s_odc": 2,
             },
             "AMETHYSTS": {
-                "b_obg": 6,
-                "s_obg": 6,
-                "b_odc": 1,
-                "s_odc": 1,
+                "b_obg": 2,
+                "s_obg": 2,
+                "b_odc": 2,
+                "s_odc": 2,
             },
         }
 
@@ -61,45 +61,37 @@ class Trader:
             # print(state.position)
 
             orders: List[Order] = []
-            if len(order_depth.sell_orders) != 0:
-                sorted_sell_orders = sorted(order_depth.sell_orders.items())
-                for price, volume in sorted_sell_orders[
-                    0 : fudge_factors[product]["s_odc"]
-                ]:
-                    # print(
-                    #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                    # )
-                    if (
-                        price <= acceptable_price
-                    ):  # place a buy order to fill sell order
-                        orders.append(
-                            Order(
-                                product,
-                                price,
-                                abs(volume) + fudge_factors[product]["s_obg"],
-                            )
+            sorted_sell_orders = sorted(order_depth.sell_orders.items())
+            for ask, volume in sorted_sell_orders[0 : fudge_factors[product]["s_odc"]]:
+                # print(
+                #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
+                # )
+                if ask <= acceptable_price:  # place a buy order to fill sell order
+                    orders.append(
+                        Order(
+                            product,
+                            ask,
+                            abs(volume) + fudge_factors[product]["s_obg"],
                         )
+                    )
 
-            if len(order_depth.buy_orders) != 0:
-                sorted_buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
-                for price, volume in sorted_buy_orders[
-                    0 : fudge_factors[product]["b_odc"]
-                ]:
-                    # print(
-                    #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
-                    # )
-                    if price > acceptable_price:
-                        orders.append(
-                            Order(
-                                product,
-                                price,
-                                -(abs(volume) + fudge_factors[product]["b_obg"]),
-                            )
+            sorted_buy_orders = sorted(order_depth.buy_orders.items(), reverse=True)
+            for bid, volume in sorted_buy_orders[0 : fudge_factors[product]["b_odc"]]:
+                # print(
+                #     f"product: {product}, price: {price}, vol: {volume}, acceptable_price: {acceptable_price}"
+                # )
+                if bid > acceptable_price:
+                    orders.append(
+                        Order(
+                            product,
+                            bid,
+                            -(abs(volume) + fudge_factors[product]["b_obg"]),
                         )
+                    )
 
             result[product] = orders
 
         traderData = "SAMPLE"
         conversions = 1
 
-        return result, traderData, conversions
+        return result, conversions, traderData
