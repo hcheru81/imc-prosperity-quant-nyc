@@ -183,7 +183,7 @@ class Trader:
 
         # start market making with remaining quota
         # if selling_pos
-        if -product_position_limit - selling_pos < 0:
+        if selling_pos > -product_position_limit:
             if selling_pos > -THRESHOLDS["over"]:
                 target_sell_price = max(acceptable_sell_price, lowest_sell_price - 1)
                 vol = -selling_pos - THRESHOLDS["over"]
@@ -206,7 +206,6 @@ class Trader:
                 orders.append(Order(product, target_sell_price, vol))
                 selling_pos += vol
                 print(f"{product} sell order 5: selling {vol} at {target_sell_price}")
-
         return orders
 
     def get_acceptable_price(

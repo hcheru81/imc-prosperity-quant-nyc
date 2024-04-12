@@ -7,25 +7,12 @@ import jsonpickle
 from datamodel import Order, OrderDepth, TradingState, UserId
 
 POSITION_LIMITS = {"AMETHYSTS": 20, "STARFRUIT": 20}
-STARFRUIT_COEFFICIENTS = [5.24986188, 0.70354115, 0.23410216, 0.04909509, 0.01222407]
 
 
 class Trader:
 
     def __init__(self):
         self.previous_starfruit_prices = []
-
-    def deserialize_trader_data(self, state_data):
-        try:
-            return jsonpickle.decode(state_data)
-        except:
-            return {}
-
-    def serialize_trader_data(self, data):
-        try:
-            return jsonpickle.encode(data)
-        except:
-            return None
 
     def vwap(self, orders: dict) -> float:
         total_volume = sum(orders.values())
@@ -34,42 +21,48 @@ class Trader:
         return sum(price * volume for price, volume in orders.items()) / total_volume
 
     def update_starfruit_price_history(
-        self, previousTradingState, tradingState: TradingState, memory: int
+        self, previousTradingState, tradingState: TradingState
     ):
-        self.previous_starfruit_prices = previousTradingState.get(
-            "previous_starfruit_prices", []
-        )
+        if "previous_starfruit_prices" in previousTradingState:
+            self.previous_starfruit_prices = previousTradingState[
+                "previous_starfruit_prices"
+            ]
+        else:
+            self.previous_starfruit_prices = []
 
-        starfruit_orders = tradingState.order_depths.get(
-            "STARFRUIT", OrderDepth()
-        )  # Provide default as OrderDepth()
-        sell_orders = starfruit_orders.sell_orders
-        buy_orders = starfruit_orders.buy_orders
+        # Use VWAP for both buy and sell orders
+        sell_orders = tradingState.order_depths["STARFRUIT"].sell_orders
+        buy_orders = tradingState.order_depths["STARFRUIT"].buy_orders
+        sell_vwap = self.get_vwap(sell_orders)
+        buy_vwap = self.get_vwap(buy_orders)
 
-        # Calculate VWAP only if there are both buy and sell orders
-        if sell_orders and buy_orders:
-            sell_vwap = self.vwap(sell_orders)
-            buy_vwap = self.vwap(buy_orders)
-            current_vwap = (sell_vwap + buy_vwap) / 2
-            self.previous_starfruit_prices.append(current_vwap)
-            self.previous_starfruit_prices = self.previous_starfruit_prices[-memory:]
+        # Calculate average of buy and sell VWAP
+        current_vwap = (sell_vwap + buy_vwap) / 2
 
-    def calculate_acceptable_price(self, product) -> int:
+        self.previous_starfruit_prices.append(current_vwap)
+
+        if len(self.previous_starfruit_prices) > 4:
+            self.previous_starfruit_prices.pop(0)
+
+    def calculate_acceptable_price(
+        self, buy_orders: dict, sell_orders: dict, product
+    ) -> int:
+
         if product == "AMETHYSTS":
-            return 10000  # Static price for AMETHYSTS
+            return 10000
 
-        if product == "STARFRUIT":
-            # Ensure we have enough historical data to apply the regression model
-            if len(self.previous_starfruit_prices) >= len(STARFRUIT_COEFFICIENTS) - 1:
-                # Calculate the expected price using linear regression weights
-                expected_price = STARFRUIT_COEFFICIENTS[0] + sum(
-                    STARFRUIT_COEFFICIENTS[i + 1] * self.previous_starfruit_prices[i]
-                    for i in range(len(STARFRUIT_COEFFICIENTS) - 1)
-                )
-                return int(expected_price)
-            else:
-                return 0  # Not enough data to calculate price
-        return 0
+        if buy_orders and sell_orders:
+            buy_vwap = self.vwap(buy_orders)
+            sell_vwap = self.vwap(sell_orders)
+            midpoint_vwap = (buy_vwap + sell_vwap) / 2
+            return midpoint_vwap - 1
+
+        elif buy_orders:
+            return max(buy_orders.keys())  # Max buy price if no sell orders
+        elif sell_orders:
+            return min(sell_orders.keys())  # Min sell price if no buy orders
+        else:
+            return 0  # Fallback
 
     def generate_orders(
         self,
@@ -121,20 +114,8 @@ class Trader:
 
         if current_position < position_limit:
             if current_position < 0:  # we are overleveraged short
-                s1, s2 = 0, 1
-                target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = abs(current_position)
-                current_position += neutralzing_quantity
-                orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            if 0 <= current_position <= 10:
-                s1, s2 = -1, 1
-                target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = abs(current_position)
-                current_position += neutralzing_quantity
-                orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            if current_position >= 10:
-                s1, s2 = -3, 1
-                target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
+                # TODO: split conditions based on how leveraged current pos is
+                target = min(mid_price_floor, sorted_buy_orders[0][0])
                 neutralzing_quantity = abs(current_position)
                 current_position += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
@@ -162,14 +143,18 @@ class Trader:
         return orders
 
     def run(self, state: TradingState):
-        previous_state_data = self.deserialize_trader_data(state.traderData)
-        self.update_starfruit_price_history(
-            previous_state_data, state, memory=len(STARFRUIT_COEFFICIENTS) - 1
-        )
+        try:
+            previousStateData = jsonpickle.decode(state.traderData)
+        except:
+            previousStateData = {}
+
+        self.update_starfruit_price_history(previousStateData, state)
 
         result = {}
         for product, order_depth in state.order_depths.items():
-            acceptable_price = self.calculate_acceptable_price(product)
+            acceptable_price = self.calculate_acceptable_price(
+                order_depth.buy_orders, order_depth.sell_orders, product
+            )
             orders = self.generate_orders(
                 product,
                 state.position.get(product, 0),
@@ -178,8 +163,7 @@ class Trader:
             )
             result[product] = orders
 
-        trader_data = {"previous_starfruit_prices": self.previous_starfruit_prices}
-        serialized_trader_data = self.serialize_trader_data(trader_data)
+        serialisedTraderData = jsonpickle.encode(serialisedTraderData)
         conversions = 1
 
-        return result, conversions, serialized_trader_data
+        return result, conversions, serialisedTraderData
