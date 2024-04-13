@@ -56,12 +56,10 @@ class Trader:
 
     def calculate_acceptable_price(self, product) -> int:
         if product == "AMETHYSTS":
-            return 10000  # Static price for AMETHYSTS
+            return 10000
 
         if product == "STARFRUIT":
-            # Ensure we have enough historical data to apply the regression model
             if len(self.previous_starfruit_prices) >= len(STARFRUIT_COEFFICIENTS) - 1:
-                # Calculate the expected price using linear regression weights
                 expected_price = STARFRUIT_COEFFICIENTS[0] + sum(
                     STARFRUIT_COEFFICIENTS[i + 1] * self.previous_starfruit_prices[i]
                     for i in range(len(STARFRUIT_COEFFICIENTS) - 1)
@@ -111,35 +109,33 @@ class Trader:
                 buy_quantity = min(abs(volume), position_limit - buy_pos)
                 buy_pos += buy_quantity
                 orders.append(Order(product, ask, buy_quantity))
-                # print(f"placed trade - prod: {product}, ask: {ask}, bq: {buy_quantity}")
 
             # if were still short we can settle for a suboptimal price to netralize
-            if ask == mid_price_floor and buy_pos < 5:
+            if ask == mid_price_floor and buy_pos < 0:
                 buy_quantity = min(abs(volume), -buy_pos)
                 buy_pos += buy_quantity
                 orders.append(Order(product, ask, buy_quantity))
 
-        assert abs(buy_pos) <= position_limit
-
-        if buy_pos < position_limit:
-            if buy_pos < 0:  # we are overleveraged short
+        if buy_pos < position_limit:  # maximize market exposure
+            if buy_pos < 0:
                 s1, s2 = 0, 0
+                # try to get back to neutral at a good price
                 target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
                 neutralzing_quantity = abs(buy_pos)
                 buy_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            if 0 <= buy_pos and buy_pos <= 10:  # SAFE
+            if 0 <= buy_pos and buy_pos <= 10:
                 s1, s2 = -1, 1
                 target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = -buy_pos + 10
+                neutralzing_quantity = -buy_pos + 10  # get holding up to 10 shares
                 buy_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            # if buy_pos >= 10:
-            #     s1, s2 = -1, 1
-            #     target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-            #     neutralzing_quantity = position_limit - buy_pos
-            #     buy_pos += neutralzing_quantity
-            #     orders.append(Order(product, target, neutralzing_quantity))  # limit buy
+            if buy_pos >= 10:
+                s1, s2 = -1, 1
+                target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
+                neutralzing_quantity = position_limit - buy_pos
+                buy_pos += neutralzing_quantity
+                orders.append(Order(product, target, neutralzing_quantity))  # limit buy
 
         sell_pos = position  # NOTE: set sell_pos to state.position
 
@@ -151,7 +147,7 @@ class Trader:
                 sell_quantity = max(-(abs(volume)), -position_limit - sell_pos)
                 orders.append(Order(product, bid, sell_quantity))
                 sell_pos += sell_quantity
-            if bid == mid_price_ceil and sell_pos > 5:  # overleveraged long
+            if bid == mid_price_ceil and sell_pos > 0:  # overleveraged long
                 sell_quantity = max(-volume, -sell_pos)
                 sell_pos += sell_quantity
                 orders.append(Order(product, bid, sell_quantity))
@@ -169,12 +165,12 @@ class Trader:
                 neutralzing_quantity = -sell_pos - 10
                 sell_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))
-            # if sell_pos <= -10:
-            #     s1, s2 = 2, -1
-            #     target = max(mid_price_ceil + s1, sorted_sell_orders[0][0] + s2)
-            #     neutralzing_quantity = -position_limit - sell_pos
-            #     sell_pos += neutralzing_quantity
-            #     orders.append(Order(product, target, neutralzing_quantity))
+            if sell_pos <= -10:
+                s1, s2 = 2, -1
+                target = max(mid_price_ceil + s1, sorted_sell_orders[0][0] + s2)
+                neutralzing_quantity = -position_limit - sell_pos
+                sell_pos += neutralzing_quantity
+                orders.append(Order(product, target, neutralzing_quantity))
         return orders
 
     def run(self, state: TradingState):
