@@ -99,81 +99,81 @@ class Trader:
         mid_price_ceil = math.ceil(acceptable_price)
 
         position_limit = POSITION_LIMITS.get(product, 20)
-        current_position = position
+        buy_pos = position
 
         # BUYING
         for ask, volume in sorted_sell_orders:
-            if current_position >= position_limit:
+            if buy_pos >= position_limit:
                 break
             if (
                 ask < acceptable_price
             ):  # if someone wants to sell for less than a fair price we buy
-                buy_quantity = min(abs(volume), position_limit - current_position)
-                current_position += buy_quantity
+                buy_quantity = min(abs(volume), position_limit - buy_pos)
+                buy_pos += buy_quantity
                 orders.append(Order(product, ask, buy_quantity))
                 # print(f"placed trade - prod: {product}, ask: {ask}, bq: {buy_quantity}")
 
             # if were still short we can settle for a suboptimal price to netralize
-            if ask == mid_price_floor and current_position < 5:
-                buy_quantity = min(abs(volume), -current_position)
-                current_position += buy_quantity
+            if ask == mid_price_floor and buy_pos < 5:
+                buy_quantity = min(abs(volume), -buy_pos)
+                buy_pos += buy_quantity
                 orders.append(Order(product, ask, buy_quantity))
 
-        assert abs(current_position) <= position_limit
+        assert abs(buy_pos) <= position_limit
 
-        if current_position < position_limit:
-            if current_position < 0:  # we are overleveraged short
+        if buy_pos < position_limit:
+            if buy_pos < 0:  # we are overleveraged short
                 s1, s2 = 0, 0
                 target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = abs(current_position)
-                current_position += neutralzing_quantity
+                neutralzing_quantity = abs(buy_pos)
+                buy_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            if 0 <= current_position and current_position <= 10:
+            if 0 <= buy_pos and buy_pos <= 10:
                 s1, s2 = -1, 1
                 target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = -current_position + 10
-                current_position += neutralzing_quantity
+                neutralzing_quantity = -buy_pos + 10
+                buy_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
-            if current_position >= 10:
+            if buy_pos >= 10:
                 s1, s2 = -1, 1
                 target = min(mid_price_floor + s1, sorted_buy_orders[0][0] + s2)
-                neutralzing_quantity = position_limit - current_position
-                current_position += neutralzing_quantity
+                neutralzing_quantity = position_limit - buy_pos
+                buy_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))  # limit buy
 
-        current_position = position  # NOTE: reset current_position
+        sell_pos = position  # NOTE: set sell_pos to state.position
 
         # SELLING
         for bid, volume in sorted_buy_orders:
-            if current_position <= -position_limit:
+            if sell_pos <= -position_limit:
                 break
             if bid > acceptable_price:
-                sell_quantity = max(-(abs(volume)), -position_limit - current_position)
+                sell_quantity = max(-(abs(volume)), -position_limit - sell_pos)
                 orders.append(Order(product, bid, sell_quantity))
-                current_position += sell_quantity
-            if bid == mid_price_ceil and current_position > 5:  # overleveraged long
-                sell_quantity = max(-volume, -current_position)
-                current_position += sell_quantity
+                sell_pos += sell_quantity
+            if bid == mid_price_ceil and sell_pos > 5:  # overleveraged long
+                sell_quantity = max(-volume, -sell_pos)
+                sell_pos += sell_quantity
                 orders.append(Order(product, bid, sell_quantity))
 
-        if current_position > -position_limit:  # room to sell more
-            if current_position > 0:  # we are long
+        if sell_pos > -position_limit:  # room to sell more
+            if sell_pos > 0:  # we are long
                 s1, s2 = 0, 0
                 target = max(mid_price_ceil + s1, sorted_sell_orders[0][0] + s2)
-                neutralzing_quantity = -current_position
-                current_position += neutralzing_quantity
+                neutralzing_quantity = -sell_pos
+                sell_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))
-            if current_position <= 0 and current_position >= -10:
+            if sell_pos <= 0 and sell_pos >= -10:
                 s1, s2 = 1, -1
                 target = max(mid_price_ceil + s1, sorted_sell_orders[0][0] + s2)
-                neutralzing_quantity = -current_position - 10
-                current_position += neutralzing_quantity
+                neutralzing_quantity = -sell_pos - 10
+                sell_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))
-            if current_position <= -10:
+            if sell_pos <= -10:
                 s1, s2 = 2, -1
                 target = max(mid_price_ceil + s1, sorted_sell_orders[0][0] + s2)
-                neutralzing_quantity = -position_limit - current_position
-                current_position += neutralzing_quantity
+                neutralzing_quantity = -position_limit - sell_pos
+                sell_pos += neutralzing_quantity
                 orders.append(Order(product, target, neutralzing_quantity))
         return orders
 
