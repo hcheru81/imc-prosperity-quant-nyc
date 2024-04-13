@@ -115,9 +115,11 @@ class Trader:
 
             # if were still short we can settle for a suboptimal price to netralize
             if ask == mid_price_floor and current_position < 5:
-                buy_quantity = min(abs(volume), current_position)
+                buy_quantity = min(abs(volume), -current_position)
                 current_position += buy_quantity
                 orders.append(Order(product, ask, buy_quantity))
+
+        assert abs(current_position) <= position_limit
 
         if current_position < position_limit:
             if current_position < 0:  # we are overleveraged short
@@ -139,6 +141,8 @@ class Trader:
             #     current_position += neutralzing_quantity
             #     orders.append(Order(product, target, neutralzing_quantity))  # limit buy
 
+        assert abs(current_position) <= position_limit
+
         # Selling
         for bid, volume in sorted_buy_orders:
             if current_position <= -position_limit:
@@ -151,6 +155,8 @@ class Trader:
                 sell_quantity = max(-volume, -current_position)
                 current_position += sell_quantity
                 orders.append(Order(product, bid, sell_quantity))
+
+        assert abs(current_position) <= position_limit
 
         if current_position > -position_limit:  # room to sell more
             if current_position > 0:  # we are long
@@ -171,7 +177,7 @@ class Trader:
             #     neutralzing_quantity = -current_position
             #     current_position += neutralzing_quantity
             #     orders.append(Order(product, target, neutralzing_quantity))
-
+        assert abs(current_position) <= position_limit
         return orders
 
     def run(self, state: TradingState):
