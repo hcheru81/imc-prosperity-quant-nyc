@@ -227,14 +227,6 @@ class Trader:
     #     if not self.previous_orchids_prices:
     #         return 0
     #     prev_orchids = self.previous_orchids_prices[-1]
-    #     sunlight = state.observations.conversionObservations["ORCHIDS"].sunlight
-    #     humidity = state.observations.conversionObservations["ORCHIDS"].humidity
-    #     transport_fees = state.observations.conversionObservations[
-    #         "ORCHIDS"
-    #     ].transportFees
-    #     export_tariff = state.observations.conversionObservations[
-    #         "ORCHIDS"
-    #     ].exportTariff
 
     #     # print(
     #     #     f"prev o: {prev_orchids}, sunlight: {sunlight}, humidity: {humidity}, export_tariff: {export_tariff}"
@@ -253,10 +245,9 @@ class Trader:
 
     def generate_orders(
         self,
+        state: TradingState,
         product: str,
-        position: int,
         acceptable_price: int,
-        order_depth: OrderDepth,
     ) -> List[Order]:
         """
         OUTPUTS:
@@ -264,7 +255,8 @@ class Trader:
         the price, and the modified volume (taking into account the fudge factor).
         """
         orders: List[Order] = []
-
+        order_depth = state.order_depths.get(product, OrderDepth())
+        position = state.position.get(product, 0)
         sorted_sell_orders = sorted(
             list(order_depth.sell_orders.items()), key=lambda x: x[0]
         )
@@ -362,31 +354,92 @@ class Trader:
                 orders.append(Order(product, target, neutralzing_quantity))
         return orders
 
-    def generate_orchid_orders(
-        self, state: TradingState, orchid_signal, acceptable_price
-    ):
+    def generate_orchid_orders(self, state: TradingState, acceptable_price):
 
         orders: List[Order] = []
-        orchid_depth = state.order_depths.get("ORCHIDS", OrderDepth())
+        order_depth = state.order_depths.get("ORCHIDS", OrderDepth())
 
         sorted_sell_orders = sorted(
-            list(orchid_depth.sell_orders.items()), key=lambda x: x[0]
+            list(order_depth.sell_orders.items()), key=lambda x: x[0]
         )
 
         sorted_buy_orders = sorted(
-            list(orchid_depth.buy_orders.items()),
+            list(order_depth.buy_orders.items()),
             key=lambda x: x[0],
             reverse=True,
         )
-
-        best_bid = sorted_buy_orders[0][0]
-        best_ask = sorted_sell_orders[0][0]
 
         mid_price_floor = math.floor(acceptable_price)
         mid_price_ceil = math.ceil(acceptable_price)
 
         position_limit = POSITION_LIMITS.get("ORCHIDS", 100)
-        buy_pos = state.position.get("ORCHIDS", 0)
+
+        nbb = sorted_buy_orders[0][0]
+        nba = sorted_sell_orders[0][0]
+
+        observations = state.observations.conversionObservations["ORCHIDS"]
+
+        sunlight = observations.sunlight
+        humidity = observations.humidity
+
+        transport_fees = observations.transportFees
+        import_tariff = observations.importTariff
+        export_tariff = observations.exportTariff
+
+        sbb = observations.bidPrice
+        sba = observations.askPrice
+
+        adj_sbb = sbb - export_tariff - transport_fees
+        adj_sba = sba + import_tariff + transport_fees
+
+        conversion_requests = abs(state.position.get("ORCHIDS", 0))
+        orders = []
+
+        # ---------------- ARBITRAGE -------------------------
+        # SELL
+        sell_position = state.position.get("ORCHIDS", 0)
+        for bid, volume in sorted_buy_orders:
+            # sell position is strictly in decreasing while we only sell
+            if abs(sell_position) <= -position_limit:
+                break
+            # If the price a trader is bidding to BUY for in the NORTH is LARGER than the BEST (lowest) price a trader is willing to SELL for in the SOUTH
+            if bid > adj_sba:
+                # The buyer in the north is willing to overpay, we buy in the south and sell to the north
+                remaining_capacity = position_limit + sell_position
+                max_ammount_to_sell = min(abs(volume), remaining_capacity)
+                # Sell max orchids to this buyer
+                sell_position -= max_ammount_to_sell
+                orders.append(Order("ORCHIDS", bid, -max_ammount_to_sell))
+            if nba > adj_sba:
+                remaining_capacity = position_limit + sell_position
+                max_ammount_to_sell = min(abs(volume), remaining_capacity)
+                # Sell max orchids to this buyer
+                sell_position -= max_ammount_to_sell
+                orders.append(
+                    Order("ORCHIDS", bid + 2, -max_ammount_to_sell)
+                )  # sell for
+
+        # BUY
+        buy_position = state.position.get("ORCHIDS", 0)
+        for ask, volume in sorted_sell_orders:
+            # buy position is strictly increasing while we only buy
+            if abs(buy_position) >= position_limit:
+                break
+            # if the price a trader is asking to sell for in the NORTH is LESS than the BEST (highest) price a trader is willing to BUY for in the SOUTH
+            if ask < adj_sbb:
+                # The seller in the NORTH is willing to undersell orchids. lets match him to the buyer in the south.
+                remaining_capacity = position_limit - buy_position
+                max_ammount_to_buy = min(abs(volume), remaining_capacity)
+                buy_position += max_ammount_to_buy
+                orders.append(Order("ORCHIDS", ask, max_ammount_to_buy))
+            if nbb < adj_sbb:
+                remaining_capacity = position_limit - buy_position
+                max_ammount_to_buy = min(abs(volume), remaining_capacity)
+                buy_position += max_ammount_to_buy
+                orders.append(Order("ORCHIDS", ask - 2, max_ammount_to_buy))
+
+        # ---------------- MARKET MAKE -------------------------
+        return orders, conversion_requests
 
     def run(self, state: TradingState):
         previous_state_data = self.deserialize_trader_data(state.traderData)
@@ -399,31 +452,22 @@ class Trader:
         self.update_price_history(previous_state_data, state, "ORCHIDS", 4)
 
         result = {}
+        conversion_requests = 0
 
         for product, order_depth in state.order_depths.items():
             acceptable_price = self.calculate_acceptable_price(product)
             if product in ["AMETHYSTS", "STARFRUIT"]:
                 orders = self.generate_orders(
+                    state,
                     product,
-                    state.position.get(product, 0),
                     acceptable_price,
-                    order_depth,
                 )
                 result[product] = orders
             elif product == "ORCHIDS":
-                orchid_signal = self.orchid_trading_decision(state)
-                logger.print(
-                    f"product: {product}, acceptable_price, {acceptable_price}, orchid_signal: {orchid_signal}"
-                )
-                orchid_bid = state.observations.conversionObservations[
-                    "ORCHIDS"
-                ].bidPrice
-                orchid_ask = state.observations.conversionObservations[
-                    "ORCHIDS"
-                ].askPrice
-                logger.print(f"orchid_bid: {orchid_bid}, orchid_ask: {orchid_ask}")
-                orders = self.generate_orchid_orders(
-                    state, orchid_signal, acceptable_price
+                # orchid_signal = self.orchid_trading_decision(state)
+
+                orders, conversion_requests = self.generate_orchid_orders(
+                    state, acceptable_price
                 )
                 result[product] = orders
 
@@ -431,7 +475,7 @@ class Trader:
             "previous_starfruit_prices": self.previous_starfruit_prices,
             "previous_orchids_prices": self.previous_orchids_prices,
         }
-        conversions = 0
+        conversions = conversion_requests
 
         serialized_trader_data = self.serialize_trader_data(trader_data)
 
