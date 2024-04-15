@@ -11,7 +11,9 @@ import plotly.graph_objects as go
 from dash import Dash, dcc, html
 from plotly.subplots import make_subplots
 
-log_path = "submissions/2024-04-14_17-32-57.log"
+log_path = (
+    "/Users/armaan/Desktop/imc-prosperity-quant-nyc/submissions/2024-04-15_02-18-46.log"
+)
 
 
 def read_file_sections(filepath):

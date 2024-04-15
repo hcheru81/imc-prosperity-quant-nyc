@@ -354,7 +354,7 @@ class Trader:
                 orders.append(Order(product, target, neutralzing_quantity))
         return orders
 
-    def generate_orchid_orders(self, state: TradingState, acceptable_price):
+    def generate_orchid_orders(self, state: TradingState, acceptable_price) -> tuple:
 
         orders: List[Order] = []
         order_depth = state.order_depths.get("ORCHIDS", OrderDepth())
@@ -374,9 +374,6 @@ class Trader:
 
         position_limit = POSITION_LIMITS.get("ORCHIDS", 100)
 
-        nbb = sorted_buy_orders[0][0]
-        nba = sorted_sell_orders[0][0]
-
         observations = state.observations.conversionObservations["ORCHIDS"]
 
         sunlight = observations.sunlight
@@ -386,59 +383,50 @@ class Trader:
         import_tariff = observations.importTariff
         export_tariff = observations.exportTariff
 
-        sbb = observations.bidPrice
-        sba = observations.askPrice
+        south_bid = observations.bidPrice
+        south_ask = observations.askPrice
 
-        adj_sbb = sbb - export_tariff - transport_fees
-        adj_sba = sba + import_tariff + transport_fees
+        buy_from_south = south_ask + import_tariff + transport_fees
+        sell_to_south = south_bid + export_tariff + transport_fees
 
-        conversion_requests = abs(state.position.get("ORCHIDS", 0))
+        our_bid, our_ask = round(buy_from_south) - 1, round(buy_from_south) + 1
+
+        north_best_buy = sorted_buy_orders[0][0]
+        north_best_sell = sorted_sell_orders[0][0]
+
+        # ask_price = max(north_best_sell - 1, our_ask)
+        ask_price = max(north_best_sell - 5, our_ask)  # FOR ORCHIDS
+
         orders = []
 
-        # ---------------- ARBITRAGE -------------------------
-        # SELL
-        sell_position = state.position.get("ORCHIDS", 0)
-        for bid, volume in sorted_buy_orders:
-            # sell position is strictly in decreasing while we only sell
-            if abs(sell_position) <= -position_limit:
-                break
-            # If the price a trader is bidding to BUY for in the NORTH is LARGER than the BEST (lowest) price a trader is willing to SELL for in the SOUTH
-            if bid > adj_sba:
-                # The buyer in the north is willing to overpay, we buy in the south and sell to the north
-                remaining_capacity = position_limit + sell_position
-                max_ammount_to_sell = min(abs(volume), remaining_capacity)
-                # Sell max orchids to this buyer
-                sell_position -= max_ammount_to_sell
-                orders.append(Order("ORCHIDS", bid, -max_ammount_to_sell))
-            if nba > adj_sba:
-                remaining_capacity = position_limit + sell_position
-                max_ammount_to_sell = min(abs(volume), remaining_capacity)
-                # Sell max orchids to this buyer
-                sell_position -= max_ammount_to_sell
-                orders.append(
-                    Order("ORCHIDS", bid + 2, -max_ammount_to_sell)
-                )  # sell for
-
-        # BUY
-        buy_position = state.position.get("ORCHIDS", 0)
+        current_position = 0
         for ask, volume in sorted_sell_orders:
-            # buy position is strictly increasing while we only buy
-            if abs(buy_position) >= position_limit:
-                break
-            # if the price a trader is asking to sell for in the NORTH is LESS than the BEST (highest) price a trader is willing to BUY for in the SOUTH
-            if ask < adj_sbb:
-                # The seller in the NORTH is willing to undersell orchids. lets match him to the buyer in the south.
-                remaining_capacity = position_limit - buy_position
-                max_ammount_to_buy = min(abs(volume), remaining_capacity)
-                buy_position += max_ammount_to_buy
-                orders.append(Order("ORCHIDS", ask, max_ammount_to_buy))
-            if nbb < adj_sbb:
-                remaining_capacity = position_limit - buy_position
-                max_ammount_to_buy = min(abs(volume), remaining_capacity)
-                buy_position += max_ammount_to_buy
-                orders.append(Order("ORCHIDS", ask - 2, max_ammount_to_buy))
+            if current_position < position_limit:
+                if ask <= our_bid:
+                    buy_quantity = min(-volume, position_limit - current_position)
+                    current_position += buy_quantity
+                    orders.append(Order("ORCHIDS", ask, buy_quantity))
 
-        # ---------------- MARKET MAKE -------------------------
+        if current_position < position_limit:
+            bid_price = min(north_best_buy + 1, our_bid)
+            buy_quantity = position_limit - current_position
+            current_position += buy_quantity
+            orders.append(Order("ORCHIDS", bid_price, buy_quantity))
+
+        current_position = 0
+        for bid, volume in sorted_buy_orders:
+            if current_position > -position_limit:
+                if bid >= our_ask or (current_position > 0 and bid + 1 == our_ask):
+                    sell_quantity = max(-volume, -position_limit - current_position)
+                    current_position += sell_quantity
+                    orders.append(Order("ORCHIDS", bid, sell_quantity))
+
+        if current_position > -position_limit:
+            sell_quantity = -position_limit - current_position
+            current_position += sell_quantity
+            orders.append(Order("ORCHIDS", ask_price, sell_quantity))
+
+        conversion_requests = -state.position.get("ORCHIDS", 0)
         return orders, conversion_requests
 
     def run(self, state: TradingState):
